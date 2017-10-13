@@ -18,6 +18,7 @@ import android.widget.TextView;
 
 import org.nick.wwwjdic.actionprovider.ShareActionProvider;
 import org.nick.wwwjdic.model.DictionaryEntry;
+import org.nick.wwwjdic.model.KanjiEntry;
 import org.nick.wwwjdic.model.SearchCriteria;
 import org.nick.wwwjdic.utils.Dialogs;
 import org.nick.wwwjdic.utils.DictUtils;
@@ -28,6 +29,11 @@ import org.nick.wwwjdic.utils.UIUtils;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 
 public class DictionaryEntryDetailFragment extends DetailFragment {
@@ -196,6 +202,19 @@ public class DictionaryEntryDetailFragment extends DetailFragment {
             return true;
         } else if (item.getItemId() == R.id.menu_dict_detail_create_flashcard) {
             if (canCreateFlashcards()) {
+                /*
+                String         headword       = wwwjdicEntry.getHeadword();
+                Future<String> furiganaFuture = searchKanji(headword);
+
+                String furigana;
+                try {
+                    furigana = furiganaFuture.get(10, TimeUnit.SECONDS);
+                } catch (Exception ex) {
+                    Log.e(TAG, ex.getMessage(), ex);
+                    furigana = headword;
+                }
+                startActivity(createFlashcardIntent(headword, furigana));
+                */
                 startActivity(createFlashcardIntent());
             }
         }
@@ -352,6 +371,59 @@ public class DictionaryEntryDetailFragment extends DetailFragment {
         for (String word : words) {
             jpTts.speak(word, TextToSpeech.QUEUE_ADD, null);
         }
+    }
+
+    protected Future<String> searchKanji(final String headword) {
+        SearchCriteria criteria           = SearchCriteria.createForKanjiOrReading(headword);
+        String         wwwjdicUrl         = WwwjdicPreferences.getWwwjdicUrl(getActivity());
+        int            httpTimeoutSeconds = WwwjdicPreferences.getWwwjdicTimeoutSeconds(getActivity());
+
+        class KanjiSearchCallback implements ResultList<KanjiEntry> {
+            private List<KanjiEntry> result;
+            public void setResult(List<KanjiEntry> kanjiList) {
+                result = kanjiList;
+            }
+            public void setError(Exception ex) {
+                throw new RuntimeException(ex);
+            }
+            public List<KanjiEntry> getResult() {
+                return result;
+            }
+        };
+        final KanjiSearchCallback callback = new KanjiSearchCallback();
+        final KanjiSearchTask     task     = new KanjiSearchTask(wwwjdicUrl, httpTimeoutSeconds, callback, criteria);
+
+        FutureTask<String> futureTask = new FutureTask(new Callable<String>() {
+                public String call() {
+                    task.run();
+                    List<KanjiEntry> kanjiList = callback.getResult();
+                    return generateFuriganaReading(headword, kanjiList);
+                }
+            });
+
+        getApp().getExecutorService().submit(futureTask);
+        return futureTask;
+    }
+
+    protected static String generateFuriganaReading(String headword, List<KanjiEntry> kanjiList) {
+        String furigana  = "";
+        for (KanjiEntry kanji : kanjiList) {
+            while (headword.length() > 0) {
+                String kanjiStr = kanji.getKanji();
+                if (headword.startsWith(kanjiStr)) {
+                    if (furigana.length() > 0 && !furigana.endsWith("]")) {
+                        furigana += " ";
+                    }
+                    furigana += kanjiStr + "[" + kanji.getReading() + "]";
+                    headword = headword.substring(kanjiStr.length());
+                    break;
+                } else {
+                    furigana += headword.substring(0, 1);
+                    headword = headword.substring(1);
+                }
+            }
+        }
+        return furigana + headword;
     }
 
 }

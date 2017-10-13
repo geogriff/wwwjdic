@@ -386,19 +386,48 @@ public abstract class DetailFragment extends Fragment implements
     }
 
     protected Intent createFlashcardIntent() {
+        String headword = wwwjdicEntry.getHeadword();
+        String reading  = wwwjdicEntry.getReading();
+        String furigana = reading != null? headword + "[" + reading + "]" : headword;
+        return createFlashcardIntent(headword, furigana);
+    }
+
+    protected Intent createFlashcardIntent(String headword, String reading) {
+        List<String> meanings = wwwjdicEntry.getMeanings();
+
         Intent intent = new Intent(CREATE_FLASHCARD_ACTION);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
-        intent.putExtra(EXTRA_SOURCE_TEXT, wwwjdicEntry.getHeadword());
+        intent.putExtra(EXTRA_SOURCE_TEXT, "Aedict Notepad");
+
         StringBuilder buff = new StringBuilder();
-        buff.append(wwwjdicEntry.getReading());
-        buff.append("\n");
-        List<String> meanings = wwwjdicEntry.getMeanings();
+
+        // fake aedict notepad category
+        buff.append("[default]\n");
+
+        // flashcard field 1
+        buff.append(headword.split("[;(\\[\n]")[0]);
+
+        buff.append("[");
+        
+        // flashcard field 3
         for (int i = 0; i < meanings.size(); i++) {
-            buff.append(meanings.get(i));
+            String meaning = meanings.get(i)
+                                     .replace("\n", "; ")
+                                     .replace(":", ";")
+                                     .replace("(uk) ", "")
+                                     .replace("[", "(")
+                                     .replace("]", ")");
+            buff.append(meaning);
             if (i != meanings.size() - 1) {
-                buff.append("\n");
+                buff.append("; ");
             }
         }
+
+        buff.append("]:");
+
+        // flashcard field 2
+        buff.append(reading.split("[;(\n]")[0]);
+
         intent.putExtra(EXTRA_TARGET_TEXT, buff.toString());
 
         return intent;
