@@ -36,6 +36,10 @@ android {
     preDexLibraries = false
   }
 
+  lintOptions {
+    abortOnError false
+  }
+
   sourceSets {
     debug.setRoot('build-types/debug')
     release.setRoot('build-types/release')
